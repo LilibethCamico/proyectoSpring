@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+
+		<script type="text/javascript" th:fragment="javascript">
+		$(document).ready(function() {
+
+			$("#buscar_producto").autocomplete({
+
+				source : function(request, response) {
+					$.ajax({
+						url : "/factura/cargar-productos/" + request.term,
+						dataType : "json",
+						data : {
+							term : request.term
+						},
+						success : function(data) {
+							response($.map(data, function(item) {
+								return {
+									value : item.id,
+									label : item.nombre,
+									precio : item.precio,
+								};
+							}));
+						},
+					});
+				},
+				select : function(event, ui) {
+					//$("#buscar_producto").val(ui.item.label);
+					
+					//antes de crear las lineas, preguntar si el producto existe
+					if(itemsHelper.hasProducto(ui.item.value)){ 
+						itemsHelper.incrementaCantidad(ui.item.value, ui.item.precio);
+						return false; //Importante false: ya que si existe solo incrementa la cantidad en 1
+					}
+
+					var linea = $("#plantillaItemsFactura").html(); //nombre del id que le dimos en el tbody de la tabla en planilla-items fragment, la cual desde el id vamos a obtener el contenido
+
+					linea = linea.replace(/{ID}/g, ui.item.value);
+					linea = linea.replace(/{NOMBRE}/g, ui.item.label);
+					linea = linea.replace(/{PRECIO}/g, ui.item.precio);
+
+					$("#cargarItemProductos tbody").append(linea);
+					itemsHelper.calcularImporte(ui.item.value, ui.item.precio, 1);
+
+					return false;
+				}
+			});
+			
+			$("form").submit(function(){
+				$("#plantillaItemsFactura").remove();
+				return;
+			});
+		});
+		
+		var itemsHelper = {
+				calcularImporte: function(id, precio, cantidad){
+					$("#total_importe_" + id).html(parseInt(precio) * parseInt(cantidad));
+					//despues de calcular el importe, calcular tambien el gran total como el metodo creado
+					this.calcularGranTotal();
+				},
+				hasProducto: function(id){ //compara con el name="item_id[]" en plantilla-items con el id que se esta pasando por argumento
+					
+					var resultado = false;
+					$('input[name="item_id[]"]').each(function(){ //iteramos con un each por cada input, y validamos que cada id sea igual al valor del id actual que se esta pasando
+						if(parseInt(id) == parseInt($(this).val())){
+							resultado = true; //si se cumpe la igual, cambia el estado y lo retorna
+						}
+					});
+					
+					return resultado;
+				},
+				incrementaCantidad: function(id, precio){ //incrementa la cantidad de la linea existente, se pasa el id y el precio, y la cantidad se optiene de id="cantidad_{ID}" en plantilla-items
+					var cantidad = $("#cantidad_" + id).val() ? parseInt($("#cantidad_" + id).val()) : 0; //se obtiene la cantidad y se valida preguntando si la cantidad tiene un valor numero a traves del id, con su parseo si tiene cantidad y se asigna a la cantidad
+					$("#cantidad_" + id).val(++cantidad); //pasamos la cantidad incrementa a la cantidad en plantilla-items
+					this.calcularImporte(id, precio, cantidad); //cada vez que verie la cantidad, volvemos a calcular el importe a traves del mismo objeto itemsHelper ya que estamos en el mismo colocamos this , lo cual se debe de llamar justo antes de preguntar si el producto existe, antes de crear la linea
+				},
+				//NOTA: siempre es importante separar entre metodo con , (coma)
+				eliminarLineaFactura: function(id){  // optenemos el id desde  plantilla-items de id="row_id{ID}"
+					$("#row_" + id).remove(); //la cual una vez obtenido el id, a traves de jquery lo obtenemos y con el metodo remove se elimina. la cual este metodo se invoca en plantilla-items a traves del objeto itemsHelper
+					this.calcularGranTotal();
+				},
+				calcularGranTotal: function(){
+					var total = 0;
+					
+					$('span[id^="total_importe_"]').each(function(){ // caractwer especial sombrero, para selecionar todos los que se encuentren en total importe
+						total += parseInt($(this).html()); //todos los importe se suma y se parsean a entero
+					});
+					
+					$('#gran_total').html(total); //se pasan a la vista a traves del id gran_total en el formulario
+				}
+				}
+	</script>
+</body>
+</html>
